@@ -1,0 +1,154 @@
+# general settings
+setting_name: DATSR_Train_RefSR_SwinUnetG_UnetD_AQUMA038_30s
+# scale: 4
+manual_seed: 0
+num_gpu: auto  # auto: can infer from your visible devices automatically. official: 4 GPUs
+is_train: True
+
+
+# ----------------- models options (include network(arch), loss, opti) ----------------- #
+# network structures
+model:
+  # model frameworks options
+  model_type: SISRGANModel
+  model_reference_generator: True
+  model_semantic_discriminator: True
+
+  net_d_iters: 1
+  net_d_init_iters: 0
+  # generator arch
+  network_g:
+    type: SwinUnetv3RestorationNet
+    ngf: 128
+    n_blocks: 8
+    groups: 8
+    depths: [4,4]
+    num_heads: [4,4]
+    window_size: 8
+    use_checkpoint: True
+    path: pretrained_models/feature_extraction.pth
+  # discriminator arch
+  network_d:
+    type: DiscriminatorSeDP
+    input_nc: 3
+    ndf: 64
+    semantic_dim: 1024
+    semantic_size: 16
+    use_bias: True
+    nheads: 1
+    dhead: 64
+  # pretrain path
+  path:
+    resume_state: ~
+
+  # -------- loss options for training and optimizing #
+  # pixel loss
+  loss_pixel:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+  # perceptual loss (content and style losses)
+  loss_perceptual:
+    type: PerceptualLoss
+    layer_weights:
+      'conv1_2': 0.1
+      'conv2_2': 0.1
+      'conv3_4': 1
+      'conv4_4': 1
+      'conv5_4': 1
+    vgg_type: vgg19
+    use_input_norm: true
+    perceptual_weight: !!float 1.0
+    style_weight: 0
+    range_norm: false
+    criterion: l1
+  # Locally Discriminative Learning loss
+  loss_ldl:
+    type: L1Loss
+    loss_weight: !!float 1.0
+    reduction: mean
+  # gan loss
+  loss_gan:
+    type: GANLoss
+    gan_type: vanilla
+    real_label_val: 1.0
+    fake_label_val: 0.0
+    loss_weight: !!float 1e-1
+
+  # -------- loss options for training and optimizing #
+  # generator optim
+  optim_g:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+  optim_d:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [ 0.9, 0.99 ]
+  # learning rate scheduler
+  scheduler:
+    type: MultiStepLR
+    milestones: [ 400000 ]
+    gamma: 0.5
+
+  # -------- other options #
+  ema_decay: 0.999
+  usm_sharp: True
+
+# ----------------- dataset options for synthesizing training data----------------- #
+# dataset and data loader settings
+datasets:
+  train:
+    name: AQUMA038_30s_train
+    type: VideoPanoRefTrainData
+    dataroot_gt: ../../Data/Stereo_AQUMA038_8K/AQUMA038_0025-0055_8K.mp4
+    dataroot_lq: ../../Data/Stereo_AQUMA038_8K/AQUMA038_0025-0055_2K.mp4
+    size_gt: 256
+    size_lq: 64
+    fov: 45
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 0
+    batch_size_per_gpu: 1
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  # Uncomment these for validation
+  val:
+    name: AQUMA038_30s_test
+    type: VideoPanoRefTestData
+    dataroot_gt: ../../Data/Stereo_AQUMA038_8K/AQUMA038_0025-0055_8K.mp4
+    dataroot_lq: ../../Data/Stereo_AQUMA038_8K/AQUMA038_0025-0055_2K.mp4
+    size_gt: 256
+    size_lq: 64
+    fov: 45
+
+
+# ----------------- parameters options for validation and logging ----------------- #
+# validation settings
+val:
+  val_freq: 1
+  save_img: True
+  metrics:
+    psnr: # metric name
+      type: calculate_psnr
+      crop_border: 4
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1
+  save_checkpoint_freq: 1
+  use_tb_logger: true
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+
+# other options #
+train:
+  total_iter: 400000
+  warmup_iter: -1  # no warm up
